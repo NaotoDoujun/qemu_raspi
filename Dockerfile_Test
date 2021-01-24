@@ -48,8 +48,7 @@ RUN set -x \
 # Download debian for raspi2 image. image contains vmlinuz and initrd.
 # RUN set -x \ 
 #  && curl -O https://raspi.debian.net/verified/$DEBIAN_IMG.img.xz \
-#  && unxz $DEBIAN_IMG.img.xz \
-#  && rm $DEBIAN_IMG.img.xz
+#  && unxz $DEBIAN_IMG.img.xz 
 
 # Resize debian disk image.
 #RUN qemu-img resize -f raw $DEBIAN_IMG.img 4G
