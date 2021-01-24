@@ -1,0 +1,79 @@
+FROM ubuntu:20.04
+
+ENV QEMU qemu-4.1.1
+ENV RPI_QEMU_KERNEL kernel-qemu-4.19.50-buster
+ENV RPI_QEMU_KERNEL_COMMIT 8121f35cd6814ffbde5a18783eb04abb1c0c336a
+ENV RASPBIAN_IMAGE 2019-09-26-raspbian-buster-lite
+ENV RASPBIAN_IMAGE_URL https://downloads.raspberrypi.org/raspbian_lite/images/raspbian_lite-2019-09-30
+ENV DEBIAN_IMG 20200831_raspi_2
+ENV DEBIAN_KERNEL vmlinuz-4.19.0-10-armmp
+ENV DEBIAN_RAMDISK initrd.img-4.19.0-10-armmp
+
+WORKDIR /root
+
+# Uncomment deb-src
+RUN sed -i "s/^# deb-src/deb-src/g" /etc/apt/sources.list
+
+# Timezone setting
+ENV TZ=Asia/Tokyo
+
+# Install dependencies
+RUN set -x \
+  && apt-get update \
+  && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+  busybox \
+  curl wget git build-essential python \
+  libglib2.0-dev libfdt-dev libpixman-1-dev zlib1g-dev \
+  ninja-build libguestfs-tools \
+  unzip checkinstall \
+  linux-image-generic \
+  netcat \
+  && rm -rf /var/lib/apt/lists/
+
+# Build and install qemu
+RUN set -x \
+  && curl -O https://download.qemu.org/$QEMU.tar.xz \
+  && tar xJf $QEMU.tar.xz \
+  && cd $QEMU \
+  && ./configure --target-list=arm-softmmu,aarch64-softmmu --disable-docs \
+  && make -j2 && checkinstall make install && apt-get install ./*.deb && cd /root && rm -fr $QEMU.tar.xz
+
+# Download raspbian image, kernel and DTB just for pi1 [armv6l versatilepb]
+#RUN set -x \
+#  && curl -O $RASPBIAN_IMAGE_URL/$RASPBIAN_IMAGE.zip \
+#  && rm $RASPBIAN_IMAGE.zip \
+#  && curl https://raw.githubusercontent.com/dhruvvyas90/qemu-rpi-kernel/$RPI_QEMU_KERNEL_COMMIT/$RPI_QEMU_KERNEL > kernel-qemu-buster \
+#  && curl -O https://raw.githubusercontent.com/dhruvvyas90/qemu-rpi-kernel/$RPI_QEMU_KERNEL_COMMIT/versatile-pb.dtb
+
+# Download debian for raspi2 image. image contains vmlinuz and initrd.
+# RUN set -x \ 
+#  && curl -O https://raspi.debian.net/verified/$DEBIAN_IMG.img.xz \
+#  && unxz $DEBIAN_IMG.img.xz \
+#  && rm $DEBIAN_IMG.img.xz
+
+# Resize debian disk image.
+#RUN qemu-img resize -f raw $DEBIAN_IMG.img 4G
+
+# Convert image to qcow2, resize it and enable SSH
+#RUN set -x \
+#  && qemu-img convert -f raw -O qcow2 $RASPBIAN_IMAGE.img raspbian-lite.qcow2 \
+#  && qemu-img resize raspbian-lite.qcow2 4G \
+#  && guestfish --rw -m /dev/sda1 -a raspbian-lite.qcow2 write /ssh ""
+
+# Copy raspbian native kernel and DTB for pi2 [armv7l raspi2], pi3 [aarch64 raspi3]
+#COPY native/kernel/kernel7.img native/kernel/kernel8.img native/dtb/bcm2709-rpi-2-b.dtb native/dtb/bcm2710-rpi-3-b-plus.dtb /root/
+
+# Copy kernel and ramdisk for debian raspi2 [armv7l virt]
+COPY debian/$DEBIAN_KERNEL debian/$DEBIAN_RAMDISK /root/
+
+#Copy shell
+COPY run.sh /root/run.sh
+RUN chmod 755 /root/run.sh
+
+EXPOSE 2222 8080
+
+HEALTHCHECK CMD ["nc", "-z", "-w5", "localhost", "2222"]
+
+# If you wanna turn off QEMU on terminal, Ctrl-A X
+#CMD ["/root/run.sh"]
+CMD ["/bin/bash"]
